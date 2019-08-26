@@ -1,0 +1,37 @@
+#!/bin/bash
+#
+# Summary: Uninstall all virtualenvs used except the first one
+#
+# Usage: pyenv clean
+#
+# Uninstall all virtualenvs used except the first one
+
+set -e
+[ -n "${PYENV_DEBUG}" ] && set -x
+
+# Uninstall all virtualenvs used except the first one
+clean() {
+    if [ -f '.python-version.log' ]; then
+        local origin=$(head -n1 .python-version.log | cut -d\; -f1)
+        sed 1d ".python-version.log" | while read line
+        do
+            local name=$(echo "${line}" | cut -d\; -f1)
+            pyenv uninstall --force ${name} >&2
+        done
+        local line=$(head -n1 .python-version.log)
+        echo "${line}" > .python-version.log
+        echo "${origin}" > .python-version
+    else
+        echo "No logfile found !" 1>&2
+        exit 2
+    fi
+}
+
+
+# Test number of parameters
+if [ "${#}" -ne 0 ]; then
+    pyenv-help --usage clean >&2
+    exit 1
+else
+    clean
+fi

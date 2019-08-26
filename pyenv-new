@@ -1,0 +1,164 @@
+#!/bin/bash
+#
+# Summary: Create a virtualenv in the current directory
+#
+# Usage: pyenv new <python-version> [virtualenv-name]
+#
+# Create a virtualenv using <python-version> and attach it to the current 
+# directory.
+# The name of the virtualenv is [virtualenv-name] or the name of the current 
+# directory if omitted.
+
+set -e
+[ -n "${PYENV_DEBUG}" ] && set -x
+
+
+readonly INSTALL_DIR="${HOME}/.pyenv"
+
+
+# Install a version of Python
+# ${1} : python version
+installPython() {
+    # Test if Python version is available
+    local available=$(pyenv install --list | grep "^  ${1}$")
+    if [ -z "${available}" ]; then
+        echo "The requested version of Python (${1}) is not available." 1>&2
+        echo "Execute 'pyenv install --list' to see the differents versions." 1>&2
+        exit 2
+    else
+        pyenv install ${1} 1>&2
+    fi
+}
+
+
+# Create the virtualenv
+# ${1} : python version
+# ${2} : virtualenv name (optional)
+createVirtualEnv() {
+    # Test if Python version is available
+    local available=$(pyenv versions | grep "^  ${1}$")
+    if [ -z "${available}" ]; then
+        installPython ${1}
+    fi
+
+    # Determine virtualenv name
+    local name=${2}
+    if [ -z "${2}" ]; then
+        name="${PWD##*/}"
+    fi
+
+    # Create virtualenv
+    pyenv virtualenv ${1} ${name} 1>&2
+
+    # Associate current directory with virtualenv
+    pyenv local ${name} 1>&2
+
+    # Return name of virtualenv
+    echo ${name}
+}
+
+
+# Determine if the virtualenv must be created or changed
+isCreation()
+{
+    # Check if the file .python-version exists
+    if [ -f '.python-version' ]; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+
+# Append a virtualenv name to the .python-version.log file
+# ${1} : virtualenv name
+# ${2} : Python version
+appendToLog() {
+        echo "${1};${2};" >> .python-version.log
+}
+
+
+# Get the version of the current virtualenv
+getVirtualEnvVersion() {
+    local currentVirtualEnv=$(cat .python-version)
+    cat ".python-version.log" | while read line
+    do
+        local version=$(echo "${line}" | cut -d\; -f2)
+        local name=$(echo "${line}" | cut -d\; -f1)
+        if [ "${currentVirtualEnv}" == "${name}" ]; then
+            echo ${version}
+            break
+        fi
+    done 
+}
+
+
+# Get the name of a virtualenv previously used from a python version
+# ${1} : Python version
+getVirtualEnvName() {
+    local currentVersion=$(getVirtualEnvVersion)
+    cat ".python-version.log" | while read line
+    do
+        local version=$(echo "${line}" | cut -d\; -f2)
+        local name=$(echo "${line}" | cut -d\; -f1)
+        if [ "${1}" == "${version}" ]; then
+            if [ "${currentVersion}" == "${version}" ]; then
+                echo "Virtualenv based on ${version} already activated !" 1>&2
+                exit 4
+            fi
+            echo ${name}
+            break
+        fi
+    done
+}
+
+# Modify the pip versions
+# ${1} : virtualenv name
+pipModifier() {
+    local realPip=$(readlink -f ${INSTALL_DIR}/versions/${1}/bin/pip)
+    # Update pip
+    pip install --upgrade pip > /dev/null 2>&1 || true
+    # Move pip
+    mv ${realPip} ${INSTALL_DIR}/versions/${1}/bin/pyenv-pip > /dev/null 2>&1 || true
+    chmod u+x ${INSTALL_DIR}/versions/${1}/bin/pyenv-pip > /dev/null 2>&1 || true
+    # Delete pipx
+    rm ${INSTALL_DIR}/versions/${1}/bin/pip* > /dev/null 2>&1 || true
+    # Copy customized pip
+    cp ${INSTALL_DIR}/data/pip ${INSTALL_DIR}/versions/${1}/bin
+}
+
+
+# Install modules listed in requirements.txt
+installModules() {
+    if [ -f 'requirements.txt' ]; then
+        pip install -r requirements.txt
+    fi
+}
+
+
+# Test number of parameters
+if [ -z "${1}" -o "${#}" -gt 2 ]; then
+    pyenv-help --usage new >&2
+    exit 1
+else
+    if isCreation; then
+        name=$(createVirtualEnv ${1} ${2})
+        appendToLog ${name} ${1}
+        pipModifier ${name}
+        installModules
+    else
+        if [ -z "${2}" ]; then
+            oldVirtualEnv=$(getVirtualEnvName ${1})
+            if [ -z "${oldVirtualEnv}" ]; then
+                name=$(head -n1 .python-version.log | cut -d\; -f1)-${1}
+                verif=$(createVirtualEnv ${1} ${name})
+                appendToLog ${name} ${1}
+            else
+                echo "${oldVirtualEnv}" > .python-version
+            fi
+        else
+            echo "To change virtualenv, the second parameter must be empty !" 1>&2
+            exit 3
+        fi
+    fi
+fi

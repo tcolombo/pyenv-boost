@@ -1,0 +1,6 @@
+#!/bin/bash
+
+set -euo pipefail
+
+pyenv-pip "$@" || true
+pyenv-pip freeze > requirements.txt

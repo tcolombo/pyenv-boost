@@ -1,0 +1,36 @@
+#!/bin/bash
+#
+# Summary: Display the history of virtualenvs used
+#
+# Usage: pyenv history
+#
+# Display the history of virtualenvs used
+
+set -e
+[ -n "${PYENV_DEBUG}" ] && set -x
+
+# Display the history of virtualenvs used
+displayHistory() {
+    if [ -f '.python-version.log' ]; then
+        echo "Virtualenvs history"
+        printf "%-30s %-20s\n" "Name" "Version"
+        cat ".python-version.log" | while read line
+        do
+            local version=$(echo "${line}" | cut -d\; -f2)
+            local name=$(echo "${line}" | cut -d\; -f1)
+            printf "%-30s %-20s\n" ${name} ${version}
+        done
+    else
+        echo "No logfile found !" 1>&2
+        exit 2
+    fi
+}
+
+
+# Test number of parameters
+if [ "${#}" -ne 0 ]; then
+    pyenv-help --usage history >&2
+    exit 1
+else
+    displayHistory
+fi
