@@ -1,0 +1,68 @@
+---
+
+- name: Pyenv Installer
+  hosts: 127.0.0.1
+  connection: local
+  become: yes
+
+  vars:
+      - owner: "{{user}}"
+      - group: "{{user}}"
+      - pyenv_path: "/home/{{user}}/.pyenv"
+      - shellrc_path: "/home/{{user}}/.bashrc"
+
+  tasks:
+    - name: Dependencies install
+      apt: 
+          name: "{{item}}"
+      with_items:
+          - git
+          - make
+          - build-essential
+          - libssl-dev
+          - zlib1g-dev
+          - libbz2-dev
+          - libreadline-dev
+          - libsqlite3-dev
+          - wget
+          - curl
+          - llvm
+          - libncurses5-dev
+          - libncursesw5-dev
+          - xz-utils
+          - tk-dev
+
+    - name: Pyenv clone
+      git:
+          repo: https://github.com/pyenv/pyenv.git
+          dest: "{{pyenv_path}}"
+
+    - name: Change owner of .pyenv directory
+      file:
+          dest: "{{pyenv_path}}"
+          owner: "{{owner}}"
+          group: "{{group}}"
+          recurse: yes
+
+    - name: Add Pyenv path in {{shellrc_path}} file
+      blockinfile:
+          dest: "{{shellrc_path}}"
+          block: |
+              ########################
+              # Python Configuration #
+              ########################
+              ## Pyenv's PATH
+              export PATH=${PATH}:{{pyenv_path}}/bin
+              
+              ## Python encoding utf-8
+              export PYTHONIOENCODING="utf-8"    
+              
+              ## PyEnv
+              if [ -z ${PROFILE_LOADED} ]; then
+                  export PROFILE_LOADED=true
+                  eval "$(pyenv virtualenv-init -)"
+                  eval "$(pyenv init -)"
+              fi
+
+    - name: Pyenv-boost install
+      shell: curl -L https://raw.githubusercontent.com/tcolombo/pyenv-boost/master/install.sh | bash
